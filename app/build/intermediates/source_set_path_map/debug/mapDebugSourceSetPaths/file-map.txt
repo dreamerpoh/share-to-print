@@ -1,0 +1,7 @@
+com.csr.printbridge.app-pngs-0 /data/data/com.termux/files/home/CSRPrintBridge/app/build/generated/res/pngs/debug
+com.csr.printbridge.app-resValues-1 /data/data/com.termux/files/home/CSRPrintBridge/app/build/generated/res/resValues/debug
+com.csr.printbridge.app-packageDebugResources-2 /data/data/com.termux/files/home/CSRPrintBridge/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.csr.printbridge.app-packageDebugResources-3 /data/data/com.termux/files/home/CSRPrintBridge/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.csr.printbridge.app-debug-4 /data/data/com.termux/files/home/CSRPrintBridge/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.csr.printbridge.app-debug-5 /data/data/com.termux/files/home/CSRPrintBridge/app/src/debug/res
+com.csr.printbridge.app-main-6 /data/data/com.termux/files/home/CSRPrintBridge/app/src/main/res

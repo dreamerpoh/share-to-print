@@ -1,0 +1,241 @@
+import time,os,re,shutil,threading,datetime,difflib
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import sys
+
+# Default current folder
+WATCH_FOLDER = sys.argv[1] if len(sys.argv) > 1 else "."
+#WATCH_FOLDER="."
+WATCH_EXTENSIONS=[".html",".js",".css",".txt",".json"]
+LOGFILE="version_log.txt"
+
+MODE="auto"
+
+
+def log(msg):
+    with open(LOGFILE,"a",encoding="utf8") as f:
+        f.write(msg+"\n")
+
+
+def next_version(file):
+    name,ext=os.path.splitext(file)
+    pattern=re.compile(rf"{re.escape(name)}-(\d+)\.(\d+)\.(\d+){re.escape(ext)}")
+
+    versions=[(0,0,0)]
+
+    for f in os.listdir(WATCH_FOLDER):
+        m=pattern.match(f)
+        if m:
+            versions.append(tuple(map(int,m.groups())))
+
+    major,minor,patch=max(versions)
+    patch+=1
+
+    return f"{name}-{major}.{minor}.{patch}{ext}",f"{major}.{minor}.{patch}"
+
+
+def create_version(file,note="auto save"):
+    if not os.path.exists(file):
+        return
+
+    newname,ver=next_version(file)
+    shutil.copy(file,newname)
+
+    timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry=f"{timestamp} | {file} | v{ver} | {note}"
+
+    log(entry)
+    print("Version created →",newname)
+    print("Note:",note)
+
+
+class Watcher(FileSystemEventHandler):
+    def on_modified(self,event):
+        global MODE
+
+        if MODE!="auto":
+            return
+
+        if event.is_directory:
+            return
+
+        file=os.path.basename(event.src_path)
+        ext=os.path.splitext(file)[1]
+
+        if "-" in file:
+            return
+
+        if ext not in WATCH_EXTENSIONS:
+            return
+
+        create_version(file,"auto update")
+
+
+def command_listener():
+    global MODE
+
+    while True:
+        cmd=input(">> ").strip()
+
+        if cmd=="auto":
+            MODE="auto"
+            print("MODE → AUTO")
+
+        elif cmd=="manual":
+            MODE="manual"
+            print("MODE → MANUAL")
+
+        elif cmd.startswith("save "):
+            parts=cmd.split(" ",2)
+            file=parts[1]
+            note=parts[2] if len(parts)>2 else "manual save"
+
+            if os.path.exists(file):
+                create_version(file,note)
+            else:
+                print("File not found")
+
+        elif cmd.startswith("restore "):
+            parts=cmd.split(" ")
+            if len(parts)<3:
+                print("Usage: restore filename version")
+                continue
+
+            file=parts[1]
+            version=parts[2]
+
+            name,ext=os.path.splitext(file)
+            version_file=f"{name}-{version}{ext}"
+
+            if not os.path.exists(version_file):
+                print("Version not found")
+                continue
+
+            shutil.copy(version_file,file)
+
+            timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            entry=f"{timestamp} | {file} | RESTORE v{version}"
+            log(entry)
+
+            print("Restored",file,"←",version_file)
+
+        elif cmd.startswith("compare "):
+            parts=cmd.split(" ")
+            if len(parts)<4:
+                print("Usage: compare filename v1 v2")
+                continue
+
+            file=parts[1]
+            v1=parts[2]
+            v2=parts[3]
+
+            name,ext=os.path.splitext(file)
+            f1=f"{name}-{v1}{ext}"
+            f2=f"{name}-{v2}{ext}"
+
+            if not os.path.exists(f1) or not os.path.exists(f2):
+                print("Version file missing")
+                continue
+
+            with open(f1) as a, open(f2) as b:
+                diff=difflib.unified_diff(
+                    a.readlines(),
+                    b.readlines(),
+                    fromfile=f"v{v1}",
+                    tofile=f"v{v2}",
+                    lineterm=""
+                )
+
+            print("\n".join(diff))
+
+        elif cmd.startswith("timeline "):
+            parts=cmd.split(" ")
+            if len(parts)<2:
+                print("Usage: timeline filename")
+                continue
+
+            file=parts[1]
+            name,ext=os.path.splitext(file)
+
+            pattern=re.compile(rf"{re.escape(name)}-(\d+)\.(\d+)\.(\d+){re.escape(ext)}")
+            versions=[]
+
+            for f in os.listdir(WATCH_FOLDER):
+                m=pattern.match(f)
+                if m:
+                    versions.append(tuple(map(int,m.groups())))
+
+            if not versions:
+                print("No versions found")
+                continue
+
+            versions.sort()
+
+            print("\nVersion Timeline for",file)
+            for v in versions:
+                print("v"+".".join(map(str,v)))
+
+        elif cmd.startswith("delete "):
+            parts=cmd.split(" ")
+            if len(parts)<3:
+                print("Usage: delete filename version")
+                continue
+
+            file=parts[1]
+            version=parts[2]
+
+            name,ext=os.path.splitext(file)
+            version_file=f"{name}-{version}{ext}"
+
+            if not os.path.exists(version_file):
+                print("Version not found")
+                continue
+
+            os.remove(version_file)
+
+            timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            entry=f"{timestamp} | {file} | DELETE v{version}"
+            log(entry)
+
+            print("Deleted",version_file)
+
+        elif cmd=="log":
+            if os.path.exists(LOGFILE):
+                print(open(LOGFILE).read())
+            else:
+                print("No log yet")
+
+        elif cmd=="help":
+            print("""
+Commands:
+auto → auto mode
+manual → manual mode
+save FILE note → manual save
+restore FILE VERSION → restore
+compare FILE V1 V2 → compare
+timeline FILE → list versions
+delete FILE VERSION → delete version
+log → show history
+help → commands list
+""")
+
+        else:
+            print("Unknown command. type help")
+
+
+observer=Observer()
+observer.schedule(Watcher(),WATCH_FOLDER,recursive=False)
+observer.start()
+
+threading.Thread(target=command_listener,daemon=True).start()
+
+print("Watcher running...")
+print("Type 'help' for commands")
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    observer.stop()
+
+observer.join()
